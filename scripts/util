@@ -1,0 +1,849 @@
+#!/bin/bash
+
+# 
+# quick navigation directories
+# 
+xload()
+{
+i=0
+unset array
+unset nom
+for directorio in `find ~ -regextype sed -regex $1 -type d`
+do
+   array[$i]=$directorio
+   nom[$i]=`basename $directorio`
+   i=$(($i+1))
+done
+}
+
+xbusca()
+{
+unset okdir
+tope=${#nom[@]}
+j=0
+for ((i=0;i<$tope;i++))
+do
+  echo ${array[$i]} |grep -G "$1" > /dev/null
+  if [ $? == 0 ]
+  then  
+    echo $j ${array[$i]}
+    okdir[j]=${array[$i]}
+    let j=j+1
+  fi
+done
+  if [ $j == 0 ]
+  then
+    return
+  fi
+  if [ $j == 1 ]
+  then
+   cd  ${okdir[0]}
+   return
+  fi
+  read x
+  cd  ${okdir[$x]}
+}
+
+function xcd()
+{
+unset dREG
+if [ $# == 0 ]
+then
+ echo "use: xcd dir [dir] ... "
+ return
+fi
+for arg in "$@"
+do
+  dREG+='.*'$arg
+done
+xload $dREG
+xbusca $dREG
+}
+
+# 
+# Make a list of favorites directories 
+# 
+mkdir -p ~/.fav
+_FAVDIR=~/.fav
+
+fvd()
+{
+ if [ $# != 1 ]
+  then
+   echo "use: fvd favlist "
+   return
+ fi
+ i=0
+ unset fav
+ if ! [ -f  $_FAVDIR/.fv_dir_$1 ]
+ then
+  echo "favlist not exists"
+  return
+ fi
+ for directorio in `cat $_FAVDIR/.fv_dir_$1` 
+ do
+   fav[$i]=$directorio
+   printf "\e[1;34m%02s\e[0m,%s\n" $i $directorio
+   i=$(($i+1))
+ done
+ read x
+ cd  ${fav[$x]}
+}
+
+fvdpush()
+{
+ jx=`pwd`
+ if [ $# != 1 ]
+  then
+   echo "use: fvdpush favlist "
+   return
+ fi
+
+ if [ -f $_FAVDIR/.fv_dir_$1 ]
+ then
+  fgrep $jx$ $_FAVDIR/.fv_dir_$1
+  if [ $? != 0 ]
+  then
+   pwd >> $_FAVDIR/.fv_dir_$1
+  fi
+ else
+   echo "new favlist $1 in $_FAVDIR"
+   pwd > $_FAVDIR/.fv_dir_$1
+ fi
+}
+
+fvdpop()
+{
+ jx=`pwd`
+ if [ $# != 1 ]
+  then
+   echo "use: fvdpop favlist "
+   return
+ fi
+
+ if [ -f $_FAVDIR/.fv_dir_$1 ]
+ then
+  esc_jx=$(printf '%s\n' "$jx" | sed -e 's/[\/&]/\\&/g')
+  sed -i /"$esc_jx$"/d $_FAVDIR/.fv_dir_$1
+ else
+   echo "favlist not exists"
+ fi
+}
+
+fvdrm()
+{
+ if [ $# != 1 ]
+  then
+   i=0
+   unset fvlist
+   for file in `ls $_FAVDIR/.fv_dir_* 2>/dev/null`
+   do
+     fvlist[$i]=$file
+     printf "\e[1;34m%02s\e[0m,%s\n" $i `basename $file|sed s/.fv_dir_//`
+     i=$(($i+1))
+   done 
+   if [ $i -gt 0 ]
+   then
+    read x
+    echo ${fvlist[$x]}
+    rm -f ${fvlist[$x]}
+   fi
+   unset fvlist
+   return
+ fi
+
+ rm -f $_FAVDIR/.fv_dir_$1
+}
+
+# 
+# Make a list of favorites commands 
+# 
+fvc()
+{
+ if [ $# != 1 ]
+  then
+   echo "use: fvc favlist "
+   return
+ fi
+ i=0
+ unset favcmd
+ if ! [ -f  $_FAVDIR/.fv_cmd_$1 ]
+ then
+  echo "favlist not exists"
+  return
+ fi
+ while IFS= read -r cmd || [ -n "$dep" ]
+ do
+   favcmd[$i]="$cmd"
+   printf "\e[1;34m%02s\e[0m,%s\n" $i "$cmd"
+   i=$(($i+1))
+ done <  $_FAVDIR/.fv_cmd_$1
+ ncar="${#favcmd[@]}"
+ ncar=${#ncar}
+ read -sN $ncar x
+ read -sp ">>${favcmd[$x]}"
+ echo
+ ${favcmd[$x]}
+}
+
+fvcpop()
+{
+ if [ $# != 1 ]
+  then
+   echo "use: fvcpush favlist "
+   return
+ fi
+ jx=`fc -ln -2 -2 |awk '{s="";for (i=1;i<=NF;i++) s=s $i " "; print s }'`
+ if [ -f  $_FAVDIR/.fv_cmd_$1 ]
+ then
+  sed -i /"$jx$"/d $_FAVDIR/.fv_cmd_$1
+ else
+   echo "favlist not exists"
+ fi
+}
+
+fvcpush()
+{
+ if [ $# != 1 ]
+  then
+   echo "use: fvcpush favlist "
+   return
+ fi
+ jx=`fc -ln -2 -2 |awk '{s="";for (i=1;i<=NF;i++) s=s $i " "; print s }'`
+ if [ -f  $_FAVDIR/.fv_cmd_$1 ]
+ then
+  fgrep "$jx$" $_FAVDIR/.fv_cmd_$1
+  if [ $? != 0 ]
+  then
+   echo "$jx" >> $_FAVDIR/.fv_cmd_$1
+  fi
+ else
+   echo "$jx" > $_FAVDIR/.fv_cmd_$1
+ fi
+}
+
+fvcrm()
+{
+ if [ $# != 1 ]
+  then
+   i=0
+   unset fvlist
+   for file in `ls $_FAVDIR/.fv_cmd_* 2>/dev/null`
+   do
+     fvlist[$i]=$file
+     printf "\e[1;34m%02s\e[0m,%s\n" $i `basename $file|sed s/.fv_cmd_//`
+     i=$(($i+1))
+   done 
+   if [ $i -gt 0 ]
+   then
+    read x
+    echo ${fvlist[$x]}
+    rm -f ${fvlist[$x]}
+   fi
+   unset fvlist
+   return
+ fi
+ rm -f $_FAVDIR/.fv_cmd_$1
+}
+
+
+# 
+# Search for big files
+# 
+fbig()
+{
+ if [ $# == 1 ]
+ then
+  echo find . -type f -size +$1 -exec ls -l --block-size=M --full-time {} \; |awk '{printf($5" "$6" " $9"\n")}' | sort  -k1,1nr -k2,2 |more
+  find . -type f -size +$1 -exec ls -l --block-size=M --full-time {} \; |awk '{printf($5" "$6" " $9"\n")}' | sort  -k1,1nr -k2,2 |more
+ else
+  echo "use: fbig size (ex: fbig +10M)"
+ fi
+}
+
+# 
+# Search for file
+# 
+ff()
+{
+ par=$#
+ case $par in
+ 1) echo find . -name "$1" -print
+    find . -name "$1" -print
+	;;
+ 2) echo find $1 -name "$2" -print
+    find $1 -name "$2" -print
+	;;
+ *) echo "use: ff [dir] file"
+    ;;
+ esac;
+}
+
+# 
+# Search for file contain
+# 
+ffs()
+{
+ par=$#
+ case $par in
+ 1) echo find . -exec fgrep "$1" {} \; -print
+    find . -type f -exec fgrep "$1" {} \; -print
+	;;
+ 2) echo find . -name "$1" -exec fgrep "$2" {} \; -print
+    find . -type f -name "$1" -exec fgrep "$2" {} \; -print
+	;;
+ 3) echo find "$1" -type f -name "$2" -exec fgrep "$3" {} \; -print
+    find $1 -name "$2" -exec fgrep "$3" {} \; -print
+	;;
+ *) echo "use: ffs [dir] [file] text_to_search"
+    ;;
+ esac;
+}
+
+# 
+# record commands
+# 
+rcmd()
+{
+ if [ $# == 1 ]
+ then
+  export OLDPS1=$PS1
+  export PS1="REC>"$PS1
+   
+  DE=`fc -l 0 0 |awk '{print $1}'`
+  DE=$(($DE+1))
+  export DE
+  export RCMD=$1
+ else
+  echo "Use: rcmd recordfile "
+ fi
+}
+ 
+srcmd ()
+{
+  _RECORDIR=~/record
+  mkdir -p $_RECORDIR
+  HASTA=`fc -l -1 -1 |awk '{print $1}'`
+  HASTA=$(($HASTA+1))
+  fc -l $DE $HASTA |awk '{$1="";sub(/^ /,"");print}' > $_RECORDIR/$RCMD
+  unset HASTA
+  unset DE
+  export PS1=$OLDPS1
+  unset OLDPS1
+  echo "commands record in "$_RECORDIR/$RCMD
+  unset RCMD
+}
+
+# 
+# Show real time
+# 
+pon_hora()
+{
+  IFS='[;' read -p $'\e[6n' -d R -rs _ COLUMN LINE _
+  if [ $COLUMN != 24 ]
+  then
+   COLUMN=$(($COLUMN-1))
+  fi
+  tput sc
+  tput cup $COLUMN 0
+  printf "%s" `date +%T`
+  tput rc
+}
+
+phr()
+{
+  export OLDPS1=$PS1
+  export PS1="\D{%T}"$PS1
+  trap "pon_hora;" ALRM
+  (
+     while true
+     do
+      sleep 1;
+      kill -ALRM $$;
+     done
+  ) &
+  export pid_hora=$!
+}
+
+shr()
+{
+  set +m
+  kill $pid_hora
+  export PS1=$OLDPS1
+  sleep 1
+  set -m
+}
+
+# 
+# Show a countdown
+# 
+pon_cuenta()
+{
+  IFS='[;' read -p $'\e[6n' -d R -rs _ COLUMN LINE _
+  if [ $COLUMN != 24 ]
+  then
+   COLUMN=$(($COLUMN-1))
+  fi
+  tput sc
+  tput cup $COLUMN 0
+  if [ $OPCUENTA == "+" ]
+  then
+   export CUENTASG=$(($CUENTASG+1))
+  else
+   export CUENTASG=$(($CUENTASG-1))
+  fi
+   export horas=$(($CUENTASG/3600))
+   export segundos=$(($CUENTASG%3600))
+   export minutos=$(($segundos/60))
+   segundos=$(($segundos%60))
+   if [ $CUENTASG -lt "0" ]
+   then
+    printf "\a\e[1;34m%02d:%02d:%02d\e[0m" $horas $minutos $segundos
+   else
+    printf "%02d:%02d:%02d" $horas $minutos $segundos
+   fi
+  tput rc
+
+  if [ $CUENTASG -lt "-3" ]
+  then
+   export PS1=$OLDPS1
+  fi
+}
+
+cntdown()
+{
+  if [ $# != 1 ]
+  then
+   echo "use: cntdown sg|+ "
+   return
+  fi
+
+  if [ $1 == "+" ]
+  then
+   export CUENTASG="0"
+   export OPCUENTA="+"
+  else
+   export CUENTASG=$1
+   export OPCUENTA="-"
+  fi
+  export OLDPS1=$PS1
+  export horas=$(($CUENTASG/3600))
+  export segundos=$(($CUENTASG%3600))
+  export minutos=$(($segundos/60))
+  segundos=$(($segundos%60))
+  contador=`printf "%02d:%02d:%02d" $horas $minutos $segundos`
+  export PS1="        $PS1"
+
+  trap "pon_cuenta;" ALRM
+  ( 
+     if [ $OPCUENTA == "+" ]
+     then
+      while true
+      do
+       sleep 1;
+       kill -ALRM $$;
+      done
+     else
+      while [ $CUENTASG -gt "-4" ]
+      do
+       CUENTASG=$(($CUENTASG-1))
+       sleep 1;
+       kill -ALRM $$;
+      done
+     fi 
+   )&
+
+  export pid_cuenta=$!
+}
+
+scntdown()
+{
+  set +m
+  kill -TERM ${pid_cuenta} 2>/dev/null
+  wait $pid_cuenta} 2>/dev/null
+  export PS1=$OLDPS1
+  sleep 1
+  set -m
+}
+
+#
+# Search process use file
+#
+spf()
+{
+  if [ $# != 1 ]
+  then
+   echo "use: spf file|host "
+   return
+  fi
+
+  usuario=`who -m | awk '{print $1}'`
+  ps -u $usuario | awk '{print $1}' |while read i; do lsof -p $i 2>/dev/null|grep "$1"; if [ $? == 0 ]; then echo $i; fi; done
+}
+
+#
+# Help
+#
+mhelp ()
+{
+  printf "\e[1;34m%s\e[0m,%s\n" "xcd " "quick access to a dir"
+  printf "\e[1;34m%s\e[0m,%s\n" "fvdpush - fvd - fvdpop - fvdrm " " favorite directory list "
+  printf "\e[1;34m%s\e[0m,%s\n" "fvcpush - fvc - fvcpop - fvcrm " " favorite commands list "
+  printf "\e[1;34m%s\e[0m,%s\n" "fbig "  " Big files order by size and time "
+  printf "\e[1;34m%s\e[0m,%s\n" "ff" " Find file "
+  printf "\e[1;34m%s\e[0m,%s\n" "ffs " " Find file contain "
+  printf "\e[1;34m%s\e[0m,%s\n" "rcmd - srcmd " " record commands "
+  printf "\e[1;34m%s\e[0m,%s\n" "phr - shr" " Show hour in prompt "
+  printf "\e[1;34m%s\e[0m,%s\n" "cntdown - scntdown " " Show a count down in the prompt "
+  printf "\e[1;34m%s\e[0m,%s\n" "spf " " Locates processes that have a file or host open "
+
+  printf "\e[1;34m%s\e[0m,%s\n" "bhelp" "list of bash commands."
+  printf "\e[1;34m%s\e[0m,%s\n" "shelp" "list of key shortcuts."
+}
+
+#
+# Shell help
+#
+bhelp ()
+{
+printf "\e[1;34m%10s\e[0m,%s\n" "&" "Start a new process in the background"
+printf "\e[1;34m%10s\e[0m,%s\n" "alias" "Create an alias "
+printf "\e[1;34m%10s\e[0m,%s\n" "apropos" "Search Help manual pages (man -k)"
+printf "\e[1;34m%10s\e[0m,%s\n" "apt" "Search for and install software packages (Debian/Ubuntu)"
+printf "\e[1;34m%10s\e[0m,%s\n" "apt-get" "Search for and install software packages (Debian/Ubuntu)"
+printf "\e[1;34m%10s\e[0m,%s\n" "aptitude" "Search for and install software packages (Debian/Ubuntu)"
+printf "\e[1;34m%10s\e[0m,%s\n" "aspell" "Spell Checker"
+printf "\e[1;34m%10s\e[0m,%s\n" "at" "Schedule a command to run once at a particular time"
+printf "\e[1;34m%10s\e[0m,%s\n" "awk" "Find and Replace text, database sort/validate/index"
+printf "\e[1;34m%10s\e[0m,%s\n" "basename" "Strip directory and suffix from filenames"
+printf "\e[1;34m%10s\e[0m,%s\n" "base32" "Base32 encode/decode data and print to standard output"
+printf "\e[1;34m%10s\e[0m,%s\n" "base64" "Base64 encode/decode data and print to standard output"
+printf "\e[1;34m%10s\e[0m,%s\n" "bash" "GNU Bourne-Again SHell"
+printf "\e[1;34m%10s\e[0m,%s\n" "bc" "Arbitrary precision calculator language"
+printf "\e[1;34m%10s\e[0m,%s\n" "bg" "Send to background"
+printf "\e[1;34m%10s\e[0m,%s\n" "bind" "Set or display readline key and function bindings "
+printf "\e[1;34m%10s\e[0m,%s\n" "break" "Exit from a loop "
+printf "\e[1;34m%10s\e[0m,%s\n" "builtin" "Run a shell builtin"
+printf "\e[1;34m%10s\e[0m,%s\n" "bzip2" "Compress or decompress named file(s)"
+printf "\e[1;34m%10s\e[0m,%s\n" "cal" "Display a calendar"
+printf "\e[1;34m%10s\e[0m,%s\n" "caller" "Return the context of any active subroutine call "
+printf "\e[1;34m%10s\e[0m,%s\n" "case" "Conditionally perform a command"
+printf "\e[1;34m%10s\e[0m,%s\n" "cat" "Concatenate and print (display) the content of files"
+printf "\e[1;34m%10s\e[0m,%s\n" "cd" "Change Directory"
+printf "\e[1;34m%10s\e[0m,%s\n" "cfdisk" "Partition table manipulator for Linux"
+printf "\e[1;34m%10s\e[0m,%s\n" "chattr" "Change file attributes on a Linux file system"
+printf "\e[1;34m%10s\e[0m,%s\n" "chgrp" "Change group ownership"
+printf "\e[1;34m%10s\e[0m,%s\n" "chmod" "Change access permissions"
+printf "\e[1;34m%10s\e[0m,%s\n" "chown" "Change file owner and group"
+printf "\e[1;34m%10s\e[0m,%s\n" "chpasswd" "Update passwords in batch mode"
+printf "\e[1;34m%10s\e[0m,%s\n" "chroot" "Run a command with a different root directory"
+printf "\e[1;34m%10s\e[0m,%s\n" "chkconfig" "System services (runlevel)"
+printf "\e[1;34m%10s\e[0m,%s\n" "cksum" "Print CRC checksum and byte counts"
+printf "\e[1;34m%10s\e[0m,%s\n" "clear" "Clear the terminal screen/console (ncurses)"
+printf "\e[1;34m%10s\e[0m,%s\n" "clear_console" "Clear the terminal screen/console (bash)"
+printf "\e[1;34m%10s\e[0m,%s\n" "cmp" "Compare two files"
+printf "\e[1;34m%10s\e[0m,%s\n" "comm" "Compare two sorted files line by line"
+printf "\e[1;34m%10s\e[0m,%s\n" "command" "Run a command - ignoring shell functions "
+printf "\e[1;34m%10s\e[0m,%s\n" "continue" "Resume the next iteration of a loop "
+printf "\e[1;34m%10s\e[0m,%s\n" "cp" "Copy one or more files to another location"
+printf "\e[1;34m%10s\e[0m,%s\n" "cpio" "Copy files to and from archives"
+printf "\e[1;34m%10s\e[0m,%s\n" "cron" "Daemon to execute scheduled commands"
+printf "\e[1;34m%10s\e[0m,%s\n" "crontab" "Schedule a command to run at a later time"
+printf "\e[1;34m%10s\e[0m,%s\n" "csplit" "Split a file into context-determined pieces"
+printf "\e[1;34m%10s\e[0m,%s\n" "curl" "Transfer data from or to a server"
+printf "\e[1;34m%10s\e[0m,%s\n" "cut" "Divide a file into several parts"
+printf "\e[1;34m%10s\e[0m,%s\n" "date" "Display or change the date & time"
+printf "\e[1;34m%10s\e[0m,%s\n" "dc" "Desk Calculator"
+printf "\e[1;34m%10s\e[0m,%s\n" "dd" "Data Duplicator - convert and copy a file, write disk headers, boot records"
+printf "\e[1;34m%10s\e[0m,%s\n" "ddrescue" "Data recovery tool"
+printf "\e[1;34m%10s\e[0m,%s\n" "declare" "Declare variables and give them attributes "
+printf "\e[1;34m%10s\e[0m,%s\n" "df" "Display free disk space"
+printf "\e[1;34m%10s\e[0m,%s\n" "diff" "Display the differences between two files"
+printf "\e[1;34m%10s\e[0m,%s\n" "diff3" "Show differences among three files"
+printf "\e[1;34m%10s\e[0m,%s\n" "dig" "DNS lookup"
+printf "\e[1;34m%10s\e[0m,%s\n" "dir" "Briefly list directory contents"
+printf "\e[1;34m%10s\e[0m,%s\n" "dircolors" "Colour setup for 'ls'"
+printf "\e[1;34m%10s\e[0m,%s\n" "dirname" "Convert a full pathname to just a path"
+printf "\e[1;34m%10s\e[0m,%s\n" "dirs" "Display list of remembered directories"
+printf "\e[1;34m%10s\e[0m,%s\n" "dos2unix" "Windows/MAC to UNIX text file format converter"
+printf "\e[1;34m%10s\e[0m,%s\n" "dmesg" "Print kernel & driver messages"
+printf "\e[1;34m%10s\e[0m,%s\n" "dpkg" "Package manager (Debian/Ubuntu)."
+printf "\e[1;34m%10s\e[0m,%s\n" "du" "Estimate file space usage"
+printf "\e[1;34m%10s\e[0m,%s\n" "echo" "Display message on screen "
+printf "\e[1;34m%10s\e[0m,%s\n" "egrep" "Search file(s) for lines that match an extended expression"
+printf "\e[1;34m%10s\e[0m,%s\n" "eject" "Eject removable media"
+printf "\e[1;34m%10s\e[0m,%s\n" "enable" "Enable and disable builtin shell commands "
+printf "\e[1;34m%10s\e[0m,%s\n" "env" "Environment variables"
+printf "\e[1;34m%10s\e[0m,%s\n" "ethtool" "Ethernet card settings"
+printf "\e[1;34m%10s\e[0m,%s\n" "eval" "Evaluate several commands/arguments"
+printf "\e[1;34m%10s\e[0m,%s\n" "exec" "Execute a command"
+printf "\e[1;34m%10s\e[0m,%s\n" "exit" "Exit the shell"
+printf "\e[1;34m%10s\e[0m,%s\n" "expand" "Convert tabs to spaces"
+printf "\e[1;34m%10s\e[0m,%s\n" "export" "Set an environment variable"
+printf "\e[1;34m%10s\e[0m,%s\n" "expr" "Evaluate expressions"
+printf "\e[1;34m%10s\e[0m,%s\n" "false" "Do nothing, unsuccessfully"
+printf "\e[1;34m%10s\e[0m,%s\n" "fdformat" "Low-level format a floppy disk"
+printf "\e[1;34m%10s\e[0m,%s\n" "fdisk" "Partition table manipulator for Linux"
+printf "\e[1;34m%10s\e[0m,%s\n" "fg" "Send job to foreground"
+printf "\e[1;34m%10s\e[0m,%s\n" "fgrep" "Search file(s) for lines that match a fixed string"
+printf "\e[1;34m%10s\e[0m,%s\n" "file" "Determine file type"
+printf "\e[1;34m%10s\e[0m,%s\n" "find" "Search for files that meet a desired criteria"
+printf "\e[1;34m%10s\e[0m,%s\n" "fmt" "Reformat paragraph text"
+printf "\e[1;34m%10s\e[0m,%s\n" "fold" "Wrap text to fit a specified width"
+printf "\e[1;34m%10s\e[0m,%s\n" "for" "Expand words, and execute commands"
+printf "\e[1;34m%10s\e[0m,%s\n" "format" "Format disks or tapes"
+printf "\e[1;34m%10s\e[0m,%s\n" "free" "Display memory usage"
+printf "\e[1;34m%10s\e[0m,%s\n" "fsck" "File system consistency check and repair"
+printf "\e[1;34m%10s\e[0m,%s\n" "ftp" "File Transfer Protocol"
+printf "\e[1;34m%10s\e[0m,%s\n" "function" "Define Function Macros"
+printf "\e[1;34m%10s\e[0m,%s\n" "fuser" "Identify/kill the process that is accessing a file"
+printf "\e[1;34m%10s\e[0m,%s\n" "gawk" "Find and Replace text within file(s)"
+printf "\e[1;34m%10s\e[0m,%s\n" "getopts" "Parse positional parameters"
+printf "\e[1;34m%10s\e[0m,%s\n" "getfacl" "Get file access control lists"
+printf "\e[1;34m%10s\e[0m,%s\n" "grep" "Search file(s) for lines that match a given pattern"
+printf "\e[1;34m%10s\e[0m,%s\n" "groupadd" "Add a user security group"
+printf "\e[1;34m%10s\e[0m,%s\n" "groupdel" "Delete a group"
+printf "\e[1;34m%10s\e[0m,%s\n" "groupmod" "Modify a group"
+printf "\e[1;34m%10s\e[0m,%s\n" "groups" "Print group names a user is in"
+printf "\e[1;34m%10s\e[0m,%s\n" "gzip" "Compress or decompress named file(s)"
+printf "\e[1;34m%10s\e[0m,%s\n" "hash" "Remember the full pathname of a name argument"
+printf "\e[1;34m%10s\e[0m,%s\n" "head" "Output the first part of file(s)"
+printf "\e[1;34m%10s\e[0m,%s\n" "help" "Display help for a built-in command "
+printf "\e[1;34m%10s\e[0m,%s\n" "history" "Command History"
+printf "\e[1;34m%10s\e[0m,%s\n" "hostname" "Print or set system name"
+printf "\e[1;34m%10s\e[0m,%s\n" "htop" "Interactive process viewer"
+printf "\e[1;34m%10s\e[0m,%s\n" "iconv" "Convert the character set of a file"
+printf "\e[1;34m%10s\e[0m,%s\n" "id" "Print user and group id"
+printf "\e[1;34m%10s\e[0m,%s\n" "if" "Conditionally perform a command"
+printf "\e[1;34m%10s\e[0m,%s\n" "ifconfig" "Configure a network interface"
+printf "\e[1;34m%10s\e[0m,%s\n" "ifdown" "Stop a network interface"
+printf "\e[1;34m%10s\e[0m,%s\n" "ifup" "Start a network interface up"
+printf "\e[1;34m%10s\e[0m,%s\n" "import" "Capture an X server screen and save the image to file"
+printf "\e[1;34m%10s\e[0m,%s\n" "install" "Copy files and set attributes"
+printf "\e[1;34m%10s\e[0m,%s\n" "iostat" "Report CPU and i/o statistics"
+printf "\e[1;34m%10s\e[0m,%s\n" "ip" "Routing, devices and tunnels"
+printf "\e[1;34m%10s\e[0m,%s\n" "jobs" "List active jobs "
+printf "\e[1;34m%10s\e[0m,%s\n" "join" "Join lines on a common field"
+printf "\e[1;34m%10s\e[0m,%s\n" "kill" "Kill a process by specifying its PID"
+printf "\e[1;34m%10s\e[0m,%s\n" "killall" "Kill processes by name"
+printf "\e[1;34m%10s\e[0m,%s\n" "klist" "List cached Kerberos tickets"
+printf "\e[1;34m%10s\e[0m,%s\n" "less" "Display output one screen at a time"
+printf "\e[1;34m%10s\e[0m,%s\n" "let" "Perform arithmetic on shell variables "
+printf "\e[1;34m%10s\e[0m,%s\n" "link" "Create a link to a file"
+printf "\e[1;34m%10s\e[0m,%s\n" "ln" "Create a symbolic link to a file"
+printf "\e[1;34m%10s\e[0m,%s\n" "local" "Create a function variable "
+printf "\e[1;34m%10s\e[0m,%s\n" "locate" "Find files"
+printf "\e[1;34m%10s\e[0m,%s\n" "logname" "Print current login name"
+printf "\e[1;34m%10s\e[0m,%s\n" "logout" "Exit a login shell "
+printf "\e[1;34m%10s\e[0m,%s\n" "look" "Display lines beginning with a given string"
+printf "\e[1;34m%10s\e[0m,%s\n" "lpc" "Line printer control program"
+printf "\e[1;34m%10s\e[0m,%s\n" "lpr" "Print files"
+printf "\e[1;34m%10s\e[0m,%s\n" "lprint" "Print a file"
+printf "\e[1;34m%10s\e[0m,%s\n" "lprintd" "Delete a print job"
+printf "\e[1;34m%10s\e[0m,%s\n" "lprintq" "List the print queue"
+printf "\e[1;34m%10s\e[0m,%s\n" "lprm" "Remove jobs from the print queue"
+printf "\e[1;34m%10s\e[0m,%s\n" "lsattr" "List file attributes on a Linux second extended file system"
+printf "\e[1;34m%10s\e[0m,%s\n" "lsblk" "List block devices"
+printf "\e[1;34m%10s\e[0m,%s\n" "ls" "List information about file(s)"
+printf "\e[1;34m%10s\e[0m,%s\n" "lsof" "List open files"
+printf "\e[1;34m%10s\e[0m,%s\n" "lspci" "List all PCI devices"
+printf "\e[1;34m%10s\e[0m,%s\n" "make" "Recompile a group of programs"
+printf "\e[1;34m%10s\e[0m,%s\n" "man" "Help manual"
+printf "\e[1;34m%10s\e[0m,%s\n" "mapfile" "Read lines from standard input into an indexed array variable "
+printf "\e[1;34m%10s\e[0m,%s\n" "md5sum" "Compute and check MD5 message digest"
+printf "\e[1;34m%10s\e[0m,%s\n" "mkdir" "Create new folder(s)"
+printf "\e[1;34m%10s\e[0m,%s\n" "mkfifo" "Make FIFOs (named pipes)"
+printf "\e[1;34m%10s\e[0m,%s\n" "mkfile" "Make a file"
+printf "\e[1;34m%10s\e[0m,%s\n" "mkisofs" "Create a hybrid ISO9660/JOLIET/HFS filesystem"
+printf "\e[1;34m%10s\e[0m,%s\n" "mknod" "Make block or character special files"
+printf "\e[1;34m%10s\e[0m,%s\n" "mktemp" "Make a temporary file"
+printf "\e[1;34m%10s\e[0m,%s\n" "more" "Display output one screen at a time"
+printf "\e[1;34m%10s\e[0m,%s\n" "most" "Browse or page through a text file"
+printf "\e[1;34m%10s\e[0m,%s\n" "mount" "Mount a file system"
+printf "\e[1;34m%10s\e[0m,%s\n" "mtools" "Manipulate MS-DOS files"
+printf "\e[1;34m%10s\e[0m,%s\n" "mtr" "Network diagnostics (traceroute/ping)"
+printf "\e[1;34m%10s\e[0m,%s\n" "mv" "Move or rename files or directories"
+printf "\e[1;34m%10s\e[0m,%s\n" "mmv" "Mass Move and rename (files)"
+printf "\e[1;34m%10s\e[0m,%s\n" "nc" "Netcat, read and write data across networks"
+printf "\e[1;34m%10s\e[0m,%s\n" "netstat" "Networking connections/stats"
+printf "\e[1;34m%10s\e[0m,%s\n" "nft" "nftables for packet filtering and classification"
+printf "\e[1;34m%10s\e[0m,%s\n" "nice" "Set the priority of a command or job"
+printf "\e[1;34m%10s\e[0m,%s\n" "nl" "Number lines and write files"
+printf "\e[1;34m%10s\e[0m,%s\n" "nohup" "Run a command immune to hangups"
+printf "\e[1;34m%10s\e[0m,%s\n" "notify-send" "Send desktop notifications"
+printf "\e[1;34m%10s\e[0m,%s\n" "nslookup" "Query Internet name servers interactively"
+printf "\e[1;34m%10s\e[0m,%s\n" "open" "Open a file in its default application"
+printf "\e[1;34m%10s\e[0m,%s\n" "op" "Operator access"
+printf "\e[1;34m%10s\e[0m,%s\n" "passwd" "Modify a user password"
+printf "\e[1;34m%10s\e[0m,%s\n" "paste" "Merge lines of files"
+printf "\e[1;34m%10s\e[0m,%s\n" "pathchk" "Check file name portability"
+printf "\e[1;34m%10s\e[0m,%s\n" "Perf" "Performance analysis tools for Linux"
+printf "\e[1;34m%10s\e[0m,%s\n" "ping" "Test a network connection"
+printf "\e[1;34m%10s\e[0m,%s\n" "pgrep" "List processes by name"
+printf "\e[1;34m%10s\e[0m,%s\n" "pkill" "Kill processes by name"
+printf "\e[1;34m%10s\e[0m,%s\n" "popd" "Restore the previous value of the current directory"
+printf "\e[1;34m%10s\e[0m,%s\n" "pr" "Prepare files for printing"
+printf "\e[1;34m%10s\e[0m,%s\n" "printcap" "Printer capability database"
+printf "\e[1;34m%10s\e[0m,%s\n" "printenv" "Print environment variables"
+printf "\e[1;34m%10s\e[0m,%s\n" "printf" "Format and print data "
+printf "\e[1;34m%10s\e[0m,%s\n" "ps" "Process status"
+printf "\e[1;34m%10s\e[0m,%s\n" "pushd" "Save and then change the current directory"
+printf "\e[1;34m%10s\e[0m,%s\n" "pv" "Monitor the progress of data through a pipe"
+printf "\e[1;34m%10s\e[0m,%s\n" "pwd" "Print Working Directory"
+printf "\e[1;34m%10s\e[0m,%s\n" "quota" "Display disk usage and limits"
+printf "\e[1;34m%10s\e[0m,%s\n" "quotacheck" "Scan a file system for disk usage"
+printf "\e[1;34m%10s\e[0m,%s\n" "ram" "ram disk device"
+printf "\e[1;34m%10s\e[0m,%s\n" "rar" "Archive files with compression"
+printf "\e[1;34m%10s\e[0m,%s\n" "rcp" "Copy files between two machines"
+printf "\e[1;34m%10s\e[0m,%s\n" "read" "Read a line from standard input "
+printf "\e[1;34m%10s\e[0m,%s\n" "readarray" "Read from stdin into an array variable "
+printf "\e[1;34m%10s\e[0m,%s\n" "readonly" "Mark variables/functions as readonly"
+printf "\e[1;34m%10s\e[0m,%s\n" "reboot" "Reboot the system"
+printf "\e[1;34m%10s\e[0m,%s\n" "rename" "Rename files"
+printf "\e[1;34m%10s\e[0m,%s\n" "renice" "Alter priority of running processes"
+printf "\e[1;34m%10s\e[0m,%s\n" "remsync" "Synchronize remote files via email"
+printf "\e[1;34m%10s\e[0m,%s\n" "return" "Exit a shell function"
+printf "\e[1;34m%10s\e[0m,%s\n" "rev" "Reverse lines of a file"
+printf "\e[1;34m%10s\e[0m,%s\n" "rm" "Remove files"
+printf "\e[1;34m%10s\e[0m,%s\n" "rmdir" "Remove folder(s)"
+printf "\e[1;34m%10s\e[0m,%s\n" "rsync" "Remote file copy (Synchronize file trees)"
+printf "\e[1;34m%10s\e[0m,%s\n" "screen" "Multiplex terminal, run remote shells via ssh"
+printf "\e[1;34m%10s\e[0m,%s\n" "scp" "Secure copy (remote file copy)"
+printf "\e[1;34m%10s\e[0m,%s\n" "sdiff" "Merge two files interactively"
+printf "\e[1;34m%10s\e[0m,%s\n" "sed" "Stream Editor"
+printf "\e[1;34m%10s\e[0m,%s\n" "select" "Accept user choices via keyboard input"
+printf "\e[1;34m%10s\e[0m,%s\n" "seq" "Print numeric sequences"
+printf "\e[1;34m%10s\e[0m,%s\n" "set" "Manipulate shell variables and functions"
+printf "\e[1;34m%10s\e[0m,%s\n" "setfacl" "Set file access control lists."
+printf "\e[1;34m%10s\e[0m,%s\n" "sftp" "Secure File Transfer Program"
+printf "\e[1;34m%10s\e[0m,%s\n" "sha256sum" "Compute and check SHA256 (256-bit) checksums"
+printf "\e[1;34m%10s\e[0m,%s\n" "shift" "Shift positional parameters"
+printf "\e[1;34m%10s\e[0m,%s\n" "shopt" "Shell Options"
+printf "\e[1;34m%10s\e[0m,%s\n" "shuf" "Generate random permutations"
+printf "\e[1;34m%10s\e[0m,%s\n" "shutdown" "Shutdown or restart Linux"
+printf "\e[1;34m%10s\e[0m,%s\n" "sleep" "Delay for a specified time"
+printf "\e[1;34m%10s\e[0m,%s\n" "slocate" "Find files"
+printf "\e[1;34m%10s\e[0m,%s\n" "sort" "Sort text files"
+printf "\e[1;34m%10s\e[0m,%s\n" "source" "Run commands from a file '.'  "
+printf "\e[1;34m%10s\e[0m,%s\n" "split" "Split a file into fixed-size pieces"
+printf "\e[1;34m%10s\e[0m,%s\n" "ss" "Socket Statistics"
+printf "\e[1;34m%10s\e[0m,%s\n" "ssh" "Secure Shell client (remote login program)"
+printf "\e[1;34m%10s\e[0m,%s\n" "stat" "Display file or file system status"
+printf "\e[1;34m%10s\e[0m,%s\n" "strace" "Trace system calls and signals"
+printf "\e[1;34m%10s\e[0m,%s\n" "su" "Substitute user identity"
+printf "\e[1;34m%10s\e[0m,%s\n" "sudo" "Execute a command as another user"
+printf "\e[1;34m%10s\e[0m,%s\n" "sum" "Print a checksum for a file"
+printf "\e[1;34m%10s\e[0m,%s\n" "suspend" "Suspend execution of this shell "
+printf "\e[1;34m%10s\e[0m,%s\n" "sync" "Synchronize data on disk with memory"
+printf "\e[1;34m%10s\e[0m,%s\n" "tabs" "Set tabs on a terminal"
+printf "\e[1;34m%10s\e[0m,%s\n" "tail" "Output the last part of a file"
+printf "\e[1;34m%10s\e[0m,%s\n" "tar" "Store, list or extract files in an archive"
+printf "\e[1;34m%10s\e[0m,%s\n" "tee" "Redirect output to multiple files"
+printf "\e[1;34m%10s\e[0m,%s\n" "test" "Evaluate a conditional expression"
+printf "\e[1;34m%10s\e[0m,%s\n" "time" "Measure Program running time"
+printf "\e[1;34m%10s\e[0m,%s\n" "timeout" "Run a command with a time limit"
+printf "\e[1;34m%10s\e[0m,%s\n" "times" "User and system times"
+printf "\e[1;34m%10s\e[0m,%s\n" "tmux" "Terminal multiplexer"
+printf "\e[1;34m%10s\e[0m,%s\n" "touch" "Change file timestamps"
+printf "\e[1;34m%10s\e[0m,%s\n" "top" "List processes running on the system"
+printf "\e[1;34m%10s\e[0m,%s\n" "tput" "Set terminal-dependent capabilities, color, position"
+printf "\e[1;34m%10s\e[0m,%s\n" "traceroute" "Trace Route to Host"
+printf "\e[1;34m%10s\e[0m,%s\n" "trap" "Execute a command when the shell receives a signal "
+printf "\e[1;34m%10s\e[0m,%s\n" "tr" "Translate, squeeze, and/or delete characters"
+printf "\e[1;34m%10s\e[0m,%s\n" "true" "Do nothing, successfully"
+printf "\e[1;34m%10s\e[0m,%s\n" "tsort" "Topological sort"
+printf "\e[1;34m%10s\e[0m,%s\n" "tty" "Print filename of terminal on stdin"
+printf "\e[1;34m%10s\e[0m,%s\n" "type" "Describe a command "
+printf "\e[1;34m%10s\e[0m,%s\n" "ulimit" "Limit user resources "
+printf "\e[1;34m%10s\e[0m,%s\n" "umask" "Users file creation mask"
+printf "\e[1;34m%10s\e[0m,%s\n" "umount" "Unmount a device"
+printf "\e[1;34m%10s\e[0m,%s\n" "unalias" "Remove an alias "
+printf "\e[1;34m%10s\e[0m,%s\n" "uname" "Print system information"
+printf "\e[1;34m%10s\e[0m,%s\n" "unexpand" "Convert spaces to tabs"
+printf "\e[1;34m%10s\e[0m,%s\n" "uniq" "Uniquify files"
+printf "\e[1;34m%10s\e[0m,%s\n" "units" "Convert units from one scale to another"
+printf "\e[1;34m%10s\e[0m,%s\n" "unix2dos" "UNIX to Windows or MAC text file format converter"
+printf "\e[1;34m%10s\e[0m,%s\n" "unrar" "Extract files from a rar archive"
+printf "\e[1;34m%10s\e[0m,%s\n" "unset" "Remove variable or function names"
+printf "\e[1;34m%10s\e[0m,%s\n" "unshar" "Unpack shell archive scripts"
+printf "\e[1;34m%10s\e[0m,%s\n" "until" "Execute commands (until error)"
+printf "\e[1;34m%10s\e[0m,%s\n" "uptime" "Show uptime"
+printf "\e[1;34m%10s\e[0m,%s\n" "useradd" "Create new user account"
+printf "\e[1;34m%10s\e[0m,%s\n" "userdel" "Delete a user account"
+printf "\e[1;34m%10s\e[0m,%s\n" "usermod" "Modify user account"
+printf "\e[1;34m%10s\e[0m,%s\n" "users" "List users currently logged in"
+printf "\e[1;34m%10s\e[0m,%s\n" "uuencode" "Encode a binary file"
+printf "\e[1;34m%10s\e[0m,%s\n" "uudecode" "Decode a file created by uuencode"
+printf "\e[1;34m%10s\e[0m,%s\n" "v" "Verbosely list directory contents ('ls -l -b')"
+printf "\e[1;34m%10s\e[0m,%s\n" "vdir" "Verbosely list directory contents ('ls -l -b')"
+printf "\e[1;34m%10s\e[0m,%s\n" "vi" "Text Editor"
+printf "\e[1;34m%10s\e[0m,%s\n" "vmstat" "Report virtual memory statistics"
+printf "\e[1;34m%10s\e[0m,%s\n" "w" "Show who is logged on and what they are doing"
+printf "\e[1;34m%10s\e[0m,%s\n" "wait" "Wait for a process to complete "
+printf "\e[1;34m%10s\e[0m,%s\n" "watch" "Execute/display a program periodically"
+printf "\e[1;34m%10s\e[0m,%s\n" "wc" "Print byte, word, and line counts"
+printf "\e[1;34m%10s\e[0m,%s\n" "whereis" "Search the users $path, man pages and source files for a program"
+printf "\e[1;34m%10s\e[0m,%s\n" "which" "Search the users $path for a program file"
+printf "\e[1;34m%10s\e[0m,%s\n" "while" "Execute commands"
+printf "\e[1;34m%10s\e[0m,%s\n" "who" "Print all usernames currently logged in"
+printf "\e[1;34m%10s\e[0m,%s\n" "whoami" "Print the current user id and name ('id -un')"
+printf "\e[1;34m%10s\e[0m,%s\n" "wget" "Retrieve web pages or files via HTTP, HTTPS or FTP"
+printf "\e[1;34m%10s\e[0m,%s\n" "write" "Send a message to another user"
+printf "\e[1;34m%10s\e[0m,%s\n" "xargs" "Execute utility, passing constructed argument list(s)"
+printf "\e[1;34m%10s\e[0m,%s\n" "xdg-open" "Open a file or URL in the users preferred application."
+printf "\e[1;34m%10s\e[0m,%s\n" "xxd" "Make a hexdump or do the reverse"
+printf "\e[1;34m%10s\e[0m,%s\n" "xz" "Compress or decompress .xz and .lzma files"
+printf "\e[1;34m%10s\e[0m,%s\n" "yes" "Print a string until interrupted"
+printf "\e[1;34m%10s\e[0m,%s\n" "zip" "Package and compress (archive) files"
+printf "\e[1;34m%10s\e[0m,%s\n" "." "Run a command script in the current shell"
+printf "\e[1;34m%10s\e[0m,%s\n" "!!" "Run the last command again"
+printf "\e[1;34m%10s\e[0m,%s\n" "#" "Comment / Remark"
+}
+
+#
+# Shel Short help
+#
+shelp ()
+{
+printf "\e[1;34m%10s\e[0m,%s\n" "&" "Start a new process in the background"
+"ALT+A" "Jump to the beginning of a line."
+printf "\e[1;34m%10s\e[0m,%s\n" "ALT+B" "Move one character before the cursor."
+printf "\e[1;34m%10s\e[0m,%s\n" "ALT+C" "Suspends the running command/process."
+printf "\e[1;34m%10s\e[0m,%s\n" "ALT+D" "Closes the empty Terminal."
+printf "\e[1;34m%10s\e[0m,%s\n" "ALT+F" "Move forward one character."
+printf "\e[1;34m%10s\e[0m,%s\n" "ALT+T" "Swaps the last two words."
+printf "\e[1;34m%10s\e[0m,%s\n" "ALT+U" "Capitalize all characters in a word after the cursor."
+printf "\e[1;34m%10s\e[0m,%s\n" "ALT+L" "Uncaptalize all characters in a word after the cursor."
+printf "\e[1;34m%10s\e[0m,%s\n" "ALT+R" "Undo any changes to a command that you have brought from the history if you've edited it."
+printf "\e[1;34m%10s\e[0m,%s\n" "ALT+." "Use the last word of the previous command."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+A" "Quickly move to the beginning of the line."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+B" "To move backward one character."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+C" "Stop the currently running command"
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+D" "Delete one character backward."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+E" "Move to the end of the line."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+F" "Move forward one character."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+G" "Leave the history searching mode without running the command."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+H" "Delete the characters before the cursor, same as BACKSPACE."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+J" "Same as ENTER/RETURN key."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+K" "Delete all characters after the cursor."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+L" "Clears the screen and redisplay the line."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+M" "Same as CTRL+J or RETURN."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+N" "Display next line in the command history. Or using the DOWN arrow."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+O" "Run the command that you found using reverse search i.e CTRL+R."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+P" "Displays the previous line in the command history. Or using the UP arrow."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+R" "Searches the history backward (Reverse search)."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+S" "Searches the history forward."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+T" "Swaps the last two characters."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+U" "Delete all characters before the cursor."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+V" "Makes the next character typed verbatim."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+W" "Delete the words before the cursor."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+X" "Lists the possible filename completions of the current word."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+XX" "Jump to start point of the line and back to the current cursor position."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+Y" "Retrieves the last item that you deleted or cut. Opposite of CTRL+W."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+Z" "Stops the current command."
+printf "\e[1;34m%10s\e[0m,%s\n" "CTRL+[" "Equivalent to ESC key."
+printf "\e[1;34m%10s\e[0m,%s\n" "!!" "Repeats the last command."
+printf "\e[1;34m%10s\e[0m,%s\n" "ESC+t" "Swaps the last two words."
+printf "\e[1;34m%10s\e[0m,%s\n" "Tab" "Auto-complete files and folder names"
+}
+
